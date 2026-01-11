@@ -1,0 +1,120 @@
+name: CI/CD Multi-Env
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and Push
+        run: |
+          # Build once with the SHA tag
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/my-app:${{ github.sha }} .
+          docker push ${{ steps.login-ecr.outputs.registry }}/my-app:${{ github.sha }}
+
+  deploy-dev:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Download current Task Definition
+        run: |
+          aws ecs describe-task-definition --task-definition my-app-dev-td --query taskDefinition > task-def.json
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def.json
+          container-name: my-java-container
+          image: ${{ secrets.ECR_REPOSITORY_URL }}:${{ needs.build-and-push.outputs.image_tag }}
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: java-api-service
+          cluster: java-api-cluster-dev
+          wait-for-service-stability: true
+  deploy-stg:
+    needs: deploy-dev
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: stg
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Download current Task Definition
+        run: |
+          aws ecs describe-task-definition --task-definition my-app-stg-td --query taskDefinition > task-def.json
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def.json
+          container-name: my-java-container
+          image: ${{ secrets.ECR_REPOSITORY_URL }}:${{ needs.build-and-push.outputs.image_tag }}
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: java-api-service
+          cluster: java-api-cluster-stg
+          wait-for-service-stability: true
+
+  deploy-prod:
+    needs: deploy-stg
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Download current Task Definition
+        run: |
+          aws ecs describe-task-definition --task-definition my-app-prod-td --query taskDefinition > task-def.json
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def.json
+          container-name: my-java-container
+          image: ${{ secrets.ECR_REPOSITORY_URL }}:${{ needs.build-and-push.outputs.image_tag }}
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: java-api-service
+          cluster: java-api-cluster-prod
+          wait-for-service-stability: true

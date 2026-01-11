@@ -1,0 +1,138 @@
+name: 'Terraform Deployment'
+
+on:
+  push:
+    branches: [ "main" ]
+    paths: [ 'terraform/**' ]
+  pull_request:
+    branches: [ "main" ]
+    paths: [ 'terraform/**' ]
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write # Required for Infracost to post comments
+
+jobs:
+  deploy-dev:
+    name: 'Deploy Dev'
+    runs-on: ubuntu-latest
+    environment: dev
+    defaults:
+      run:
+        working-directory: ./terraform
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Infracost Breakdown
+        run: |
+          infracost breakdown --path . \
+            --terraform-var-file="tfvars/dev.tfvars" \
+            --format json \
+            --out-file /tmp/infracost.json
+      
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -var-file=tfvars/dev.tfvars -detailed-exitcode -out=tfplan
+
+      - name: Terraform Apply
+        if: github.event_name == 'push' && steps.plan.outputs.exitcode == '2'
+        run: terraform apply -auto-approve tfplan
+
+  deploy-stg:
+    name: 'Deploy Dev'
+    needs: deploy-dev
+    runs-on: ubuntu-latest
+    environment: stg
+    defaults:
+      run:
+        working-directory: ./terraform
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_STG }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Infracost Breakdown
+        run: |
+          infracost breakdown --path . \
+            --terraform-var-file="tfvars/stg.tfvars" \
+            --format json \
+            --out-file /tmp/infracost.json
+      
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -var-file=tfvars/stg.tfvars -detailed-exitcode -out=tfplan
+
+      - name: Terraform Apply
+        if: github.event_name == 'push' && steps.plan.outputs.exitcode == '2'
+        run: terraform apply -auto-approve tfplan
+
+  deploy-prod:
+    name: 'Deploy Prod'
+    needs: deploy-stg
+    runs-on: ubuntu-latest
+    environment: production
+    if: github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: ./terraform
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Infracost Breakdown (Prod)
+        run: infracost breakdown --path . --terraform-var-file="tfvars/prod.tfvars"
+
+      - name: Terraform Plan (Prod)
+        id: plan
+        run: terraform plan -var-file=tfvars/prod.tfvars -detailed-exitcode -out=tfplan
+
+      - name: Terraform Apply (Prod)
+        if: steps.plan.outputs.exitcode == '2'
+        run: terraform apply -auto-approve tfplan
