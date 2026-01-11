@@ -59,7 +59,7 @@ jobs:
 
   deploy-stg:
     name: 'Deploy Stg'
-    needs: deploy Dev
+    needs: deploy-dev
     runs-on: ubuntu-latest
     environment: stg
     defaults:
@@ -103,7 +103,7 @@ jobs:
 
   deploy-prod:
     name: 'Deploy Prod'
-    needs: deploy Stg
+    needs: deploy-stg
     runs-on: ubuntu-latest
     environment: production
     if: github.ref == 'refs/heads/main'
