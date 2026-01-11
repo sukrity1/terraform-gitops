@@ -3,6 +3,10 @@ name: CI/CD Multi-Env
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - 'terraform/**'
+      - 'docs/**'
 
 permissions:
   contents: read
@@ -60,7 +64,7 @@ jobs:
           service: java-api-service
           cluster: java-api-cluster-dev
           wait-for-service-stability: true
-          
+
   deploy-stg:
     needs: deploy-dev
     needs: build-and-push
