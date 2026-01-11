@@ -58,8 +58,8 @@ jobs:
         run: terraform apply -auto-approve tfplan
 
   deploy-stg:
-    name: 'Deploy Dev'
-    needs: deploy-dev
+    name: 'Deploy Stg'
+    needs: deploy Dev
     runs-on: ubuntu-latest
     environment: stg
     defaults:
@@ -103,7 +103,7 @@ jobs:
 
   deploy-prod:
     name: 'Deploy Prod'
-    needs: deploy-stg
+    needs: deploy Stg
     runs-on: ubuntu-latest
     environment: production
     if: github.ref == 'refs/heads/main'

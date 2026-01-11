@@ -60,6 +60,7 @@ jobs:
           service: java-api-service
           cluster: java-api-cluster-dev
           wait-for-service-stability: true
+          
   deploy-stg:
     needs: deploy-dev
     needs: build-and-push
