@@ -67,7 +67,6 @@ jobs:
 
   deploy-stg:
     needs: deploy-dev
-    needs: build-and-push
     runs-on: ubuntu-latest
     environment: stg
     steps:
