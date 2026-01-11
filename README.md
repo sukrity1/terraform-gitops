@@ -67,6 +67,29 @@ This Dockerfile is built using Industry Best Practices for production-grade Java
 | Security | Non-Root User | Creates a spring user/group. If the container is compromised, the attacker has limited permissions on the host system. |
 | Reliability | Docker HEALTHCHECK | Allows AWS ECS or Kubernetes to automatically restart the container if the /health endpoint stops responding. |
 
+# 📊 APM & Observability Integration
+
+1. The integration is handled at the Container Level using the Java Instrumentation API. This means we don't change your Java code; we change how the Virtual Machine (JVM) starts.
+
+2. The Agent: We download the newrelic-agent.jar during the Docker build process.
+
+3. The Attachment: In the Dockerfile ENTRYPOINT, we use the -javaagent flag. This allows New Relic to "sit inside" the JVM and intercept calls to measure performance.
+
+4. The Bridge: The agent sends data out of your AWS container to the New Relic cloud over HTTPS (Port 443).
+
+5. Once your container is running in AWS, follow these steps:
+  . Login: Go to one.newrelic.com.
+  . APM & Services: Click on the "APM & Services" tab in the left sidebar.
+  . Find your App: Look for Java-REST-API (or whatever you set in your ENV).
+  . Key Metrics to Watch:
+      `Transactions` See which API endpoints are slow.
+      `JVM Metrics` Monitor heap memory usage and Garbage Collection (GC) to prevent crashes.
+
+6. To move from "Monitoring" to "Observability," you should set up Alert Policies. Recommended alerts for this API include:
+  . Apdex Score: Alerts you when the user experience drops (e.g., response time > 500ms).
+  . Error Percentage: Triggers if more than 5% of requests result in a 500 Internal Server Error.
+  . Infrastucture Alerts: Triggers if CPU or Memory usage on your Fargate task stays above 85% for more than 5 minutes.
+
 # 🛠 Prerequisites & Setup
 
 Before you begin, ensure you have the following installed:
